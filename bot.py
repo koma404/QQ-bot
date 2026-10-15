@@ -75,6 +75,7 @@ class Bot:
         self.user_hits: dict[int, deque] = {}
         self.global_hits: deque = deque()
         self.api_waiters: dict[str, asyncio.Future] = {}
+        self.ignored_seen: set[int] = set()
 
     # ---------- transport ----------
     async def handler(self, ws) -> None:
@@ -145,7 +146,7 @@ class Bot:
             elif is_self:
                 self.on_own_message(peer, text)
             else:
-                self.on_friend_message(peer, text)
+                self.on_friend_message(peer, text, ev.get("sender", {}).get("nickname", ""))
         except Exception:
             log.exception("处理事件出错")
 
@@ -162,9 +163,15 @@ class Bot:
         self.unanswered.discard(peer)
         log.info("你亲自回复了 %s，AI 暂停 %s 分钟", peer, self.cfg.takeover_minutes)
 
-    def on_friend_message(self, peer: int, text: str) -> None:
-        if peer not in self.cfg.friends or not text:
+    def on_friend_message(self, peer: int, text: str, nick: str = "") -> None:
+        if peer not in self.cfg.friends:
+            if peer not in self.ignored_seen:
+                self.ignored_seen.add(peer)
+                log.info("非白名单好友来消息，已忽略（要放行就把 QQ 号加进 config.yaml）: %s  QQ=%s", nick, peer)
             return
+        if not text:
+            return
+        log.info("收到 %s: %s", self.cfg.friends[peer].name or peer, text)
         self.memory.add(peer, "user", text)
         self.last_in[peer] = self.clock()
         self.unanswered.add(peer)
@@ -252,6 +259,7 @@ class Bot:
                     break
                 await self.send_text(peer, seg)
                 sent.append(seg)
+                log.info("回复 %s: %s", self.cfg.friends[peer].name or peer, seg)
         except (ConnectionError, asyncio.TimeoutError, asyncio.CancelledError) as e:
             log.error("发送失败: %r", e)
         finally:
@@ -263,12 +271,28 @@ class Bot:
     async def on_command(self, text: str) -> None:
         if not text.lower().startswith("/ai"):
             return
-        out = self.run_command(text[3:].strip())
+        out = await self.run_command(text[3:].strip())
         if self.ws is not None and self.self_id:
             await self.send_text(self.self_id, out)
 
-    def run_command(self, cmd: str) -> str:
+    async def list_friends(self, keyword: str = "") -> str:
+        try:
+            resp = await self.call_api("get_friend_list", {})
+        except (ConnectionError, asyncio.TimeoutError) as e:
+            return f"获取好友列表失败: {e!r}"
+        rows = []
+        for f in resp.get("data") or []:
+            label = f"{f.get('remark') or ''} {f.get('nickname') or ''}".strip()
+            if keyword in label.lower() or keyword in str(f.get("user_id")):
+                rows.append(f"{f.get('user_id')}  {label}")
+        shown = rows[:40]
+        more = f"\n…还有 {len(rows) - 40} 个，请加关键字缩小范围" if len(rows) > 40 else ""
+        return (f"共 {len(rows)} 个匹配:\n" + "\n".join(shown) + more) if rows else "没有匹配的好友"
+
+    async def run_command(self, cmd: str) -> str:
         head, *rest = cmd.lower().split() or ["status"]
+        if head == "friends":
+            return await self.list_friends(rest[0] if rest else "")
         if head == "on":
             self.enabled = True
             return "AI 已开启"
@@ -283,18 +307,18 @@ class Bot:
             return f"已清空 {rest[0]} 的历史"
         paused = [str(p) for p in self.pause_until if self._paused(p)]
         return (f"AI {'开启' if self.enabled else '关闭'}；白名单 {len(self.cfg.friends)} 人；"
-                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|clear <QQ号>")
+                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|clear <QQ号>")
 
     async def console(self) -> None:
         loop = asyncio.get_running_loop()
-        print("控制台命令: on / off / status / resume / clear <QQ号>")
+        print("控制台命令: on / off / status / resume / friends [关键字] / clear <QQ号>")
         while True:
             try:
                 line = await loop.run_in_executor(None, input)
             except EOFError:
                 return
             if line.strip():
-                print(self.run_command(line.strip()))
+                print(await self.run_command(line.strip()))
 
 
 async def main() -> None:

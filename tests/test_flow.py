@@ -66,15 +66,18 @@ class Flow(unittest.IsolatedAsyncioTestCase):
         async for raw in self.client:
             req = json.loads(raw)
             self.api.append(req)
+            data = ([{"user_id": 222, "nickname": "小明", "remark": "室友"},
+                     {"user_id": 333, "nickname": "路人", "remark": ""}]
+                    if req["action"] == "get_friend_list" else {"message_id": 1})
             await self.client.send(json.dumps({"status": "ok", "retcode": 0,
-                                               "data": {"message_id": 1}, "echo": req["echo"]}))
+                                               "data": data, "echo": req["echo"]}))
 
     async def emit(self, ev):
         await self.client.send(json.dumps(ev))
 
     def sent_texts(self, peer=FRIEND):
         return [r["params"]["message"][0]["data"]["text"] for r in self.api
-                if r["params"]["user_id"] == peer]
+                if r["action"] == "send_private_msg" and r["params"]["user_id"] == peer]
 
     async def test_whitelisted_friend_gets_split_reply(self):
         await self.emit(private(FRIEND, "在吗"))
@@ -137,6 +140,21 @@ class Flow(unittest.IsolatedAsyncioTestCase):
         await self.emit(private(SELF, "/ai on", post="message_sent", target=SELF))
         await asyncio.sleep(0.2)
         self.assertTrue(self.bot.enabled)
+
+    async def test_friends_command_lists_qq_numbers(self):
+        out = await self.bot.run_command("friends 室友")
+        self.assertIn("222", out)
+        self.assertNotIn("333", out)
+        await self.emit(private(SELF, "/ai friends", target=SELF))
+        await asyncio.sleep(0.3)
+        self.assertTrue(any("333" in x and "222" in x for x in self.sent_texts(SELF)))
+
+    async def test_stranger_logged_once_with_qq(self):
+        with self.assertLogs("bot", "INFO") as cm:
+            await self.emit(private(STRANGER, "hi"))
+            await self.emit(private(STRANGER, "hi2"))
+            await asyncio.sleep(0.3)
+        self.assertEqual(sum("333" in m for m in cm.output), 1)
 
     async def test_rate_limit(self):
         self.cfg.rate_per_user_per_min = 1
