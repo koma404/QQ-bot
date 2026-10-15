@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 import time
 import uuid
@@ -17,7 +18,7 @@ from datetime import datetime
 from websockets.asyncio.server import serve
 
 import config as config_mod
-from config import Config
+from config import Config, Friend
 from llm import LLM, LLMError
 from memory import Memory
 
@@ -76,6 +77,77 @@ class Bot:
         self.global_hits: deque = deque()
         self.api_waiters: dict[str, asyncio.Future] = {}
         self.ignored_seen: set[int] = set()
+        self.overrides = self._load_overrides()
+
+    # ---------- whitelist edits made at runtime (stored apart from config.yaml) ----------
+    def _load_overrides(self) -> dict:
+        data = {"add": {}, "remove": []}
+        path = self.cfg.friends_file
+        if path and os.path.exists(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data.update(json.load(f))
+            except (OSError, ValueError):
+                log.warning("读取 %s 失败，已忽略", path)
+        for q, v in data["add"].items():
+            self.cfg.friends[int(q)] = Friend(**v)
+        for q in data["remove"]:
+            self.cfg.friends.pop(int(q), None)
+        return data
+
+    def _save_overrides(self) -> None:
+        path = self.cfg.friends_file
+        if not path:
+            return
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(self.overrides, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+
+    async def friend_name(self, qq: int) -> str:
+        try:
+            data = (await self.call_api("get_friend_list", {})).get("data") or []
+        except (ConnectionError, asyncio.TimeoutError):
+            return ""
+        for f in data:
+            if int(f.get("user_id", 0)) == qq:
+                return f.get("remark") or f.get("nickname") or ""
+        return ""
+
+    async def cmd_allow(self, key: str, note: str) -> str:
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        name = (self.cfg.friends[peer].name if peer in self.cfg.friends else "") \
+            or await self.friend_name(peer) or key
+        friend = Friend(name=name, note=note or (self.cfg.friends[peer].note if peer in self.cfg.friends else ""))
+        self.cfg.friends[peer] = friend
+        self.overrides["add"][str(peer)] = {"name": friend.name, "note": friend.note}
+        if peer in self.overrides["remove"]:
+            self.overrides["remove"].remove(peer)
+        self._save_overrides()
+        return f"已加入白名单: {friend.name}（{peer}），立即生效。可用 ask 试聊"
+
+    async def cmd_deny(self, key: str) -> str:
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        if peer not in self.cfg.friends:
+            return f"{peer} 本来就不在白名单里"
+        name = self.cfg.friends.pop(peer).name
+        self.overrides["add"].pop(str(peer), None)
+        if peer not in self.overrides["remove"]:
+            self.overrides["remove"].append(peer)
+        self._save_overrides()
+        self.unanswered.discard(peer)
+        return f"已移出白名单: {name or peer}（{peer}）"
+
+    def cmd_whitelist(self) -> str:
+        if not self.cfg.friends:
+            return "白名单为空，用 allow <QQ号或名字> 添加"
+        return "白名单:\n" + "\n".join(
+            f"{q}  {f.name}{'  ' + f.note if f.note else ''}" for q, f in self.cfg.friends.items())
 
     # ---------- transport ----------
     async def handler(self, ws) -> None:
@@ -342,6 +414,16 @@ class Bot:
             if len(parts) < 3:
                 return f"用法: {head} <QQ号或名字> <内容>"
             return await (self.cmd_say if head == "say" else self.cmd_ask)(parts[1], parts[2])
+        if head == "allow":
+            if len(parts) < 2:
+                return "用法: allow <QQ号或名字> [备注，如 室友，说话随意]"
+            return await self.cmd_allow(parts[1], parts[2] if len(parts) > 2 else "")
+        if head == "deny":
+            if len(parts) < 2:
+                return "用法: deny <QQ号或名字>"
+            return await self.cmd_deny(parts[1])
+        if head in ("whitelist", "list"):
+            return self.cmd_whitelist()
         if head == "friends":
             return await self.list_friends(rest[0] if rest else "")
         if head == "on":
@@ -358,11 +440,11 @@ class Bot:
             return f"已清空 {rest[0]} 的历史"
         paused = [str(p) for p in self.pause_until if self._paused(p)]
         return (f"AI {'开启' if self.enabled else '关闭'}；白名单 {len(self.cfg.friends)} 人；"
-                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|say <谁> <话>|ask <谁> <话>|clear <QQ号>")
+                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|whitelist|allow <谁> [备注]|deny <谁>|say <谁> <话>|ask <谁> <话>|clear <QQ号>")
 
     async def console(self) -> None:
         loop = asyncio.get_running_loop()
-        print("控制台命令: on / off / status / resume / friends [关键字] / say <谁> <话> / ask <谁> <话> / clear <QQ号>")
+        print("控制台命令: on / off / status / resume / friends [关键字] / whitelist / allow <谁> [备注] / deny <谁> / say <谁> <话> / ask <谁> <话> / clear <QQ号>")
         while True:
             try:
                 line = await loop.run_in_executor(None, input)

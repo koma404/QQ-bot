@@ -27,6 +27,7 @@ class Config:
     persona_file: str = "persona.md"
     db_path: str = "data/chat.db"
     friends: dict[int, Friend] = field(default_factory=dict)
+    friends_file: str = "data/friends.json"  # whitelist edits made via allow/deny
 
     start_enabled: bool = True
     takeover_minutes: float = 30

@@ -46,6 +46,7 @@ class Flow(unittest.IsolatedAsyncioTestCase):
         self.tmp.close()
         self.cfg = Config(openrouter_api_key="x", persona_file=self.tmp.name, humanize=False,
                           debounce_seconds=0.1, db_path=":memory:",
+                          friends_file=os.path.join(tempfile.mkdtemp(), "friends.json"),
                           friends={FRIEND: Friend("小明", "室友")})
         self.llm = FakeLLM()
         self.bot = Bot(self.cfg, self.llm, Memory(":memory:"))
@@ -177,6 +178,28 @@ class Flow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.bot.memory.recent(FRIEND, 10), [{"role": "user", "content": "之前的话"}])
         self.assertEqual(self.llm.calls[0][1][-1], {"role": "user", "content": "在吗"})
         self.assertIn("不在白名单", await self.bot.run_command(f"ask {STRANGER} hi"))
+
+    async def test_allow_takes_effect_persists_and_deny(self):
+        self.assertIn("已加入", await self.bot.run_command(f"allow {STRANGER} 路人，说话直接"))
+        self.assertEqual(self.bot.cfg.friends[STRANGER].note, "路人，说话直接")
+        self.assertEqual(self.bot.cfg.friends[STRANGER].name, "路人")  # name from friend list
+        await self.emit(private(STRANGER, "在吗"))
+        await asyncio.sleep(0.5)
+        self.assertEqual(self.sent_texts(STRANGER), ["好的", "收到"])
+        # survives restart
+        again = Bot(self.cfg_copy(), self.llm, Memory(":memory:"))
+        self.assertIn(STRANGER, again.cfg.friends)
+        # deny a config.yaml friend
+        self.assertIn("已移出", await self.bot.run_command("deny 小明"))
+        self.assertNotIn(FRIEND, self.bot.cfg.friends)
+        again = Bot(self.cfg_copy(), self.llm, Memory(":memory:"))
+        self.assertNotIn(FRIEND, again.cfg.friends)
+        self.assertIn(STRANGER, again.cfg.friends)
+        self.assertIn("路人", self.bot.cmd_whitelist())
+
+    def cfg_copy(self):
+        return Config(friends={FRIEND: Friend("小明", "室友")}, friends_file=self.cfg.friends_file,
+                      db_path=":memory:")
 
     async def test_rate_limit(self):
         self.cfg.rate_per_user_per_min = 1
