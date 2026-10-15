@@ -156,6 +156,28 @@ class Flow(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.3)
         self.assertEqual(sum("333" in m for m in cm.output), 1)
 
+    async def test_say_sends_and_echo_pauses_ai(self):
+        out = await self.bot.run_command("say 小明 晚上 吃啥")
+        self.assertIn("222", out)
+        self.assertEqual(self.sent_texts(), ["晚上 吃啥"])
+        await self.emit(private(SELF, "晚上 吃啥", post="message_sent", target=FRIEND))
+        await asyncio.sleep(0.1)
+        self.assertTrue(self.bot._paused(FRIEND))
+
+    async def test_say_errors(self):
+        self.assertIn("找不到", await self.bot.run_command("say 不存在 hi"))
+        self.assertIn("用法", await self.bot.run_command("say 小明"))
+
+    async def test_ask_is_dry_run(self):
+        self.bot.memory.add(FRIEND, "user", "之前的话")
+        out = await self.bot.run_command("ask 小明 在吗")
+        self.assertIn("试聊", out)
+        self.assertIn("好的", out)
+        self.assertEqual(self.api, [])
+        self.assertEqual(self.bot.memory.recent(FRIEND, 10), [{"role": "user", "content": "之前的话"}])
+        self.assertEqual(self.llm.calls[0][1][-1], {"role": "user", "content": "在吗"})
+        self.assertIn("不在白名单", await self.bot.run_command(f"ask {STRANGER} hi"))
+
     async def test_rate_limit(self):
         self.cfg.rate_per_user_per_min = 1
         await self.emit(private(FRIEND, "1"))

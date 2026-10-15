@@ -289,8 +289,59 @@ class Bot:
         more = f"\n…还有 {len(rows) - 40} 个，请加关键字缩小范围" if len(rows) > 40 else ""
         return (f"共 {len(rows)} 个匹配:\n" + "\n".join(shown) + more) if rows else "没有匹配的好友"
 
+    async def resolve_friend(self, key: str) -> tuple[int | None, str]:
+        """QQ number, or a name/remark keyword -> (qq, error)."""
+        if key.isdigit():
+            return int(key), ""
+        k = key.lower()
+        hits = [(q, f.name) for q, f in self.cfg.friends.items() if k in f.name.lower()]
+        if not hits:
+            try:
+                data = (await self.call_api("get_friend_list", {})).get("data") or []
+            except (ConnectionError, asyncio.TimeoutError) as e:
+                return None, f"获取好友列表失败: {e!r}"
+            hits = [(f["user_id"], f.get("remark") or f.get("nickname") or "") for f in data
+                    if k in f"{f.get('remark') or ''}{f.get('nickname') or ''}".lower()]
+        if len(hits) == 1:
+            return int(hits[0][0]), ""
+        if not hits:
+            return None, f"找不到好友「{key}」"
+        return None, "匹配到多个，请改用 QQ 号:\n" + "\n".join(f"{q}  {n}" for q, n in hits[:10])
+
+    async def cmd_say(self, key: str, text: str) -> str:
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        # not via send_text: the echo should count as *you* talking (pauses the AI)
+        resp = await self.call_api(
+            "send_private_msg",
+            {"user_id": peer, "message": [{"type": "text", "data": {"text": text}}]},
+        )
+        return f"已发送给 {peer}" if resp.get("status") == "ok" else f"发送失败: {resp}"
+
+    async def cmd_ask(self, key: str, text: str) -> str:
+        """Dry run: show what the AI would say to this friend. Nothing is sent or saved."""
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        if peer not in self.cfg.friends:
+            return f"{peer} 不在白名单里，先加进 config.yaml"
+        history = self.memory.recent(peer, self.cfg.history_window)
+        history.append({"role": "user", "content": text})
+        try:
+            reply = await self.llm.chat(self._system_prompt(peer), history)
+        except LLMError as e:
+            return str(e)
+        return "（试聊，未发送）\n" + "\n".join(split_reply(reply, self.cfg.max_segments))
+
     async def run_command(self, cmd: str) -> str:
-        head, *rest = cmd.lower().split() or ["status"]
+        parts = cmd.split(maxsplit=2)
+        head = parts[0].lower() if parts else "status"
+        rest = [p.lower() for p in parts[1:]]
+        if head in ("say", "ask"):
+            if len(parts) < 3:
+                return f"用法: {head} <QQ号或名字> <内容>"
+            return await (self.cmd_say if head == "say" else self.cmd_ask)(parts[1], parts[2])
         if head == "friends":
             return await self.list_friends(rest[0] if rest else "")
         if head == "on":
@@ -307,11 +358,11 @@ class Bot:
             return f"已清空 {rest[0]} 的历史"
         paused = [str(p) for p in self.pause_until if self._paused(p)]
         return (f"AI {'开启' if self.enabled else '关闭'}；白名单 {len(self.cfg.friends)} 人；"
-                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|clear <QQ号>")
+                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|say <谁> <话>|ask <谁> <话>|clear <QQ号>")
 
     async def console(self) -> None:
         loop = asyncio.get_running_loop()
-        print("控制台命令: on / off / status / resume / friends [关键字] / clear <QQ号>")
+        print("控制台命令: on / off / status / resume / friends [关键字] / say <谁> <话> / ask <谁> <话> / clear <QQ号>")
         while True:
             try:
                 line = await loop.run_in_executor(None, input)
