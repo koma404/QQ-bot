@@ -157,13 +157,33 @@ class Flow(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.3)
         self.assertEqual(sum("333" in m for m in cm.output), 1)
 
-    async def test_say_sends_and_echo_pauses_ai(self):
+    async def test_say_does_not_pause_and_is_recorded(self):
         out = await self.bot.run_command("say 小明 晚上 吃啥")
         self.assertIn("222", out)
         self.assertEqual(self.sent_texts(), ["晚上 吃啥"])
         await self.emit(private(SELF, "晚上 吃啥", post="message_sent", target=FRIEND))
         await asyncio.sleep(0.1)
+        self.assertFalse(self.bot._paused(FRIEND))
+        self.assertEqual(self.bot.memory.recent(FRIEND, 5),
+                         [{"role": "assistant", "content": "晚上 吃啥"}])  # echo not duplicated
+
+    async def test_pause_and_resume_one_friend(self):
+        self.assertIn("已暂停", await self.bot.run_command("pause 小明"))
+        await self.emit(private(FRIEND, "在吗"))
+        await asyncio.sleep(0.5)
+        self.assertEqual(self.llm.calls, [])
+        out = await self.bot.run_command("resume 小明")
+        self.assertIn("已恢复", out)
+        self.assertIn("正在回复", out)
+        await asyncio.sleep(0.5)
+        self.assertEqual(self.sent_texts(), ["好的", "收到"])
+
+    async def test_timed_pause_and_resume_all(self):
+        await self.bot.run_command("pause 小明 10")
         self.assertTrue(self.bot._paused(FRIEND))
+        self.assertIn("所有人", await self.bot.run_command("resume"))
+        self.assertFalse(self.bot._paused(FRIEND))
+        self.assertIn("用法", await self.bot.run_command("pause 小明 abc"))
 
     async def test_say_errors(self):
         self.assertIn("找不到", await self.bot.run_command("say 不存在 hi"))

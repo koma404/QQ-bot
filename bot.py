@@ -233,7 +233,7 @@ class Bot:
         self.memory.add(peer, "assistant", text)
         self.pause_until[peer] = now + self.cfg.takeover_minutes * 60
         self.unanswered.discard(peer)
-        log.info("你亲自回复了 %s，AI 暂停 %s 分钟", peer, self.cfg.takeover_minutes)
+        log.info("你在别处亲自回复了 %s，AI 暂停 %s 分钟（resume 可恢复）", peer, self.cfg.takeover_minutes)
 
     def on_friend_message(self, peer: int, text: str, nick: str = "") -> None:
         if peer not in self.cfg.friends:
@@ -384,12 +384,44 @@ class Bot:
         peer, err = await self.resolve_friend(key)
         if peer is None:
             return err
-        # not via send_text: the echo should count as *you* talking (pauses the AI)
-        resp = await self.call_api(
-            "send_private_msg",
-            {"user_id": peer, "message": [{"type": "text", "data": {"text": text}}]},
-        )
-        return f"已发送给 {peer}" if resp.get("status") == "ok" else f"发送失败: {resp}"
+        # the console is you driving the bot: send like the AI would (no takeover pause)
+        try:
+            await self.send_text(peer, text)
+        except (ConnectionError, asyncio.TimeoutError) as e:
+            return f"发送失败: {e!r}"
+        if peer in self.cfg.friends:
+            self.memory.add(peer, "assistant", text)
+        return f"已发送给 {peer}"
+
+    async def cmd_pause(self, key: str, minutes: str) -> str:
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        if peer not in self.cfg.friends:
+            return f"{peer} 不在白名单里，AI 本来就不会回他"
+        if minutes:
+            try:
+                mins = float(minutes)
+            except ValueError:
+                return "用法: pause <QQ号或名字> [分钟]（不写分钟则一直暂停，直到 resume）"
+            self.pause_until[peer] = self.clock() + mins * 60
+            return f"已暂停 {self.cfg.friends[peer].name or peer} 的 AI 回复 {mins:g} 分钟"
+        self.pause_until[peer] = float("inf")
+        return f"已暂停 {self.cfg.friends[peer].name or peer} 的 AI 回复，用 resume 恢复"
+
+    async def cmd_resume(self, key: str) -> str:
+        peer, err = await self.resolve_friend(key)
+        if peer is None:
+            return err
+        was = self.pause_until.pop(peer, None) is not None
+        name = (self.cfg.friends[peer].name if peer in self.cfg.friends else "") or peer
+        # catch up on something they sent recently while the AI was paused
+        pending = (peer in self.unanswered and peer in self.cfg.friends
+                   and self.clock() - self.last_in.get(peer, 0) < 600 and peer not in self.workers)
+        if pending:
+            self.workers[peer] = asyncio.create_task(self._worker(peer))
+        return (f"已恢复 {name} 的 AI 回复" if was else f"{name} 本来就没有被暂停") \
+            + ("；正在回复他刚发来的消息" if pending else "")
 
     async def cmd_ask(self, key: str, text: str) -> str:
         """Dry run: show what the AI would say to this friend. Nothing is sent or saved."""
@@ -414,6 +446,12 @@ class Bot:
             if len(parts) < 3:
                 return f"用法: {head} <QQ号或名字> <内容>"
             return await (self.cmd_say if head == "say" else self.cmd_ask)(parts[1], parts[2])
+        if head == "pause":
+            if len(parts) < 2:
+                return "用法: pause <QQ号或名字> [分钟]（不写分钟则一直暂停，直到 resume）"
+            return await self.cmd_pause(parts[1], parts[2] if len(parts) > 2 else "")
+        if head in ("resume", "start") and len(parts) > 1:
+            return await self.cmd_resume(parts[1])
         if head == "allow":
             if len(parts) < 2:
                 return "用法: allow <QQ号或名字> [备注，如 室友，说话随意]"
@@ -432,19 +470,19 @@ class Bot:
         if head == "off":
             self.enabled = False
             return "AI 已关闭"
-        if head == "resume":
+        if head in ("resume", "start"):
             self.pause_until.clear()
-            return "已取消所有让位暂停"
+            return "已恢复所有人的 AI 回复"
         if head == "clear" and rest and rest[0].isdigit():
             self.memory.clear(int(rest[0]))
             return f"已清空 {rest[0]} 的历史"
         paused = [str(p) for p in self.pause_until if self._paused(p)]
         return (f"AI {'开启' if self.enabled else '关闭'}；白名单 {len(self.cfg.friends)} 人；"
-                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|friends [关键字]|whitelist|allow <谁> [备注]|deny <谁>|say <谁> <话>|ask <谁> <话>|clear <QQ号>")
+                f"暂停中: {','.join(paused) or '无'}\n命令: /ai on|off|status|resume|pause <谁> [分钟]|resume [谁]|friends [关键字]|whitelist|allow <谁> [备注]|deny <谁>|say <谁> <话>|ask <谁> <话>|clear <QQ号>")
 
     async def console(self) -> None:
         loop = asyncio.get_running_loop()
-        print("控制台命令: on / off / status / resume / friends [关键字] / whitelist / allow <谁> [备注] / deny <谁> / say <谁> <话> / ask <谁> <话> / clear <QQ号>")
+        print("控制台命令: on / off / status / pause <谁> [分钟] / resume [谁] / friends [关键字] / whitelist / allow <谁> [备注] / deny <谁> / say <谁> <话> / ask <谁> <话> / clear <QQ号>")
         while True:
             try:
                 line = await loop.run_in_executor(None, input)
