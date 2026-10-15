@@ -1,0 +1,30 @@
+# 复制为 config.yaml 后修改（config.yaml 已被 .gitignore，不会提交）
+
+openrouter_api_key: ""            # 也可用环境变量 OPENROUTER_API_KEY
+model: "anthropic/claude-sonnet-4.5"   # 任意 OpenRouter 模型 ID
+
+# 白名单：只有这里的好友会被 AI 回复。key 是对方 QQ 号
+friends:
+  10001:
+    name: "小明"
+    note: "大学室友，说话随意，爱开玩笑"
+  10002: "老王"                    # 简写：只写称呼
+
+start_enabled: true               # 启动时 AI 是否开启
+takeover_minutes: 30              # 你亲自回复某人后，AI 对该好友暂停多久
+quiet_hours: "00:30-08:00"        # 静默时段不回复；留空 "" 关闭
+debounce_seconds: 3               # 对方连发消息时，等多久再统一回复
+humanize: true                    # 模拟阅读和打字延迟
+
+history_window: 30                # 每次带给模型的最近消息条数
+max_segments: 4                   # 一次回复最多拆成几条消息
+max_tokens: 400
+temperature: 0.9
+
+rate_per_user_per_min: 6          # 单个好友每分钟最多触发回复次数
+rate_global_per_min: 15           # 全局每分钟上限
+
+# NapCat 的 WebSocket 客户端要连到这里
+listen_host: "127.0.0.1"
+listen_port: 6700
+onebot_token: ""                  # 可选；与 NapCat 里配置的 token 一致
