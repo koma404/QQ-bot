@@ -24,7 +24,7 @@ if not exist .venv\Scripts\python.exe (
 )
 
 rem ---- 依赖：缺什么补什么 ----
-.venv\Scripts\python -c "import websockets, httpx, yaml" >nul 2>nul || (
+.venv\Scripts\python -c "import websockets, httpx, yaml, aiohttp" >nul 2>nul || (
   echo 安装依赖...
   .venv\Scripts\python -m pip install -q -r requirements.txt || (
     echo [错误] 依赖安装失败。若上面提到需要 Microsoft C++，说明 Python 版本太新：

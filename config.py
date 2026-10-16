@@ -27,7 +27,17 @@ class Config:
     persona_file: str = "persona.md"
     db_path: str = "data/chat.db"
     friends: dict[int, Friend] = field(default_factory=dict)
-    friends_file: str = "data/friends.json"  # whitelist edits made via allow/deny
+    friends_file: str = "data/friends.json"  # whitelist edits made via allow/deny / UI
+    settings_file: str = "data/settings.json"  # settings, AI on/off and paused friends changed in the UI
+    log_non_whitelisted: bool = True  # keep non-whitelisted friends' messages for the UI (never answered)
+
+    # control panel (web UI); binds to localhost only unless you change ui_host
+    ui_enabled: bool = True
+    ui_host: str = "127.0.0.1"
+    ui_port: int = 8765
+    ui_open_browser: bool = True
+    ui_token: str = ""  # empty: generated once and kept in data/ui_token.txt
+    console_input: bool = False  # legacy terminal commands (the UI replaces them)
 
     start_enabled: bool = True
     takeover_minutes: float = 30

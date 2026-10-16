@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QQ 助手控制台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%232f6bff%27/%3E%3Cpath d=%27M8 11h16v9H15l-4 4v-4H8z%27 fill=%27white%27/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f3f4f8; --panel: #ffffff; --panel2: #f7f8fb; --text: #1b1f2a; --muted: #6b7385;
+  --line: #e4e7ee; --accent: #2f6bff; --accent-fg: #ffffff; --accent-soft: #e8efff;
+  --ai: #7a4dff; --ai-soft: #f1ebff; --ai-line: #d9ccff;
+  --ok: #15803d; --ok-soft: #e3f6ea; --warn: #b45309; --warn-soft: #fdf0dc;
+  --danger: #dc2626; --danger-soft: #fde8e8; --bubble-in: #ffffff;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 6px 20px rgba(16,24,40,.07);
+  --font: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1118; --panel: #161a24; --panel2: #1b202c; --text: #e8ebf3; --muted: #8e97aa;
+    --line: #262c3a; --accent: #5b8cff; --accent-fg: #0b1020; --accent-soft: #1c2a4e;
+    --ai: #b39bff; --ai-soft: #271f45; --ai-line: #3f3470;
+    --ok: #4ade80; --ok-soft: #13301f; --warn: #fbbf24; --warn-soft: #36280d;
+    --danger: #f87171; --danger-soft: #3a1818; --bubble-in: #212737;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.35);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, textarea, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* ---------- top bar ---------- */
+#topbar { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 54px; flex: none;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; }
+.status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none; }
+.dot.on { background: var(--ok); }
+.spacer { flex: 1; }
+.status .short { display: none; }
+.master { display: flex; align-items: center; gap: 8px; margin-right: 6px; font-size: 13px; }
+.switch { width: 38px; height: 22px; border-radius: 11px; border: 0; padding: 0; background: var(--line); position: relative; cursor: pointer; transition: background .15s; flex: none; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch[aria-checked="true"] { background: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--panel2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--panel2); }
+.btn.sm { padding: 3px 10px; font-size: 13px; }
+.btn.icon { padding: 6px 9px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+#banner { flex: none; }
+.note { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+.note.info { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- layout ---------- */
+#main { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px 1fr; }
+#side { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side-head { padding: 12px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); }
+.search { width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); }
+.tabs { display: flex; gap: 4px; background: var(--panel2); padding: 3px; border-radius: 8px; }
+.tabs button { flex: 1; border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+#list { overflow-y: auto; flex: 1; padding: 6px; }
+.item { display: flex; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: transparent; border-radius: 10px; cursor: pointer; text-align: left; align-items: center; }
+.item:hover { background: var(--panel2); }
+.item.active { background: var(--accent-soft); }
+.avatar { border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 600; flex: none; user-select: none; }
+.meta { min-width: 0; flex: 1; }
+.row1, .row2 { display: flex; align-items: center; gap: 6px; }
+.nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.tm { color: var(--muted); font-size: 12px; flex: none; }
+.snip { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.chip { font-size: 11px; padding: 0 7px; border-radius: 9px; line-height: 18px; flex: none; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.chip.ai { background: var(--ai-soft); color: var(--ai); border-color: transparent; }
+.unread { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex: none; }
+.empty-note { padding: 28px 18px; color: var(--muted); text-align: center; font-size: 13px; }
+
+#chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#empty { margin: auto; color: var(--muted); text-align: center; padding: 24px; }
+#chatBox { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+.titles { min-width: 0; }
+#chName { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#chSub { color: var(--muted); font-size: 12.5px; }
+#chSub.typing { color: var(--ai); }
+#chActions { display: flex; gap: 8px; align-items: center; }
+#backBtn { display: none; }
+details.menu { position: relative; }
+details.menu > summary { list-style: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+.menu-pop { position: absolute; right: 0; top: calc(100% + 6px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 4px; z-index: 5; min-width: 160px; }
+.menu-pop button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 12px; border-radius: 7px; cursor: pointer; }
+.menu-pop button:hover { background: var(--panel2); }
+
+#messages { flex: 1; overflow-y: auto; padding: 14px 18px 8px; }
+.stamp { text-align: center; color: var(--muted); font-size: 12px; margin: 12px 0 6px; }
+.row { display: flex; margin: 3px 0; }
+.row.out { justify-content: flex-end; }
+.stack { max-width: min(72%, 580px); display: flex; flex-direction: column; }
+.row.out .stack { align-items: flex-end; }
+.tag { font-size: 11px; color: var(--muted); margin: 6px 4px 1px; }
+.tag.ai { color: var(--ai); }
+.bubble { padding: 7px 12px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
+.bubble.friend { background: var(--bubble-in); border: 1px solid var(--line); border-top-left-radius: 4px; }
+.bubble.manual, .bubble.device { background: var(--accent); color: var(--accent-fg); border-top-right-radius: 4px; }
+.bubble.ai { background: var(--ai-soft); border: 1px solid var(--ai-line); border-top-right-radius: 4px; }
+.bubble.draft { background: transparent; border: 1px dashed var(--ai); color: var(--text); border-top-right-radius: 4px; }
+.hint-empty { margin: auto; color: var(--muted); text-align: center; padding: 20px; }
+
+#previewCard { margin: 0 16px 8px; padding: 12px 14px; border-radius: 12px; background: var(--ai-soft); border: 1px solid var(--ai-line); flex: none; }
+#previewCard .ph { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--ai); font-size: 13px; font-weight: 600; }
+#previewCard .pb { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+#previewCard .pf { display: flex; gap: 8px; margin-top: 10px; }
+.composer { display: flex; gap: 10px; padding: 10px 16px 14px; background: var(--panel); border-top: 1px solid var(--line); flex: none; align-items: flex-end; }
+#input { flex: 1; resize: none; border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 9px 12px; max-height: 160px; min-height: 42px; }
+.composer-actions { display: flex; gap: 8px; }
+.composer .btn { height: 42px; }
+.hintline { font-size: 12px; color: var(--muted); padding: 0 16px 8px; background: var(--panel); flex: none; }
+
+/* ---------- dialogs ---------- */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); padding: 0; width: min(580px, 94vw); box-shadow: var(--shadow); max-height: 88vh; }
+dialog::backdrop { background: rgba(8,12,20,.55); }
+dialog[open] { display: flex; flex-direction: column; }
+.dh { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); gap: 8px; }
+.dh h2 { margin: 0; font-size: 16px; flex: 1; }
+.db { padding: 16px 18px; overflow-y: auto; }
+.df { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; }
+.field { display: grid; gap: 4px; margin-bottom: 14px; }
+.field label { font-weight: 600; font-size: 13px; }
+.field .help { color: var(--muted); font-size: 12px; }
+.field input[type=text], .field input[type=number], .field input[type=password], .field textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); }
+.field.inline { display: flex; align-items: center; gap: 10px; }
+.field.inline label { flex: 1; }
+#personaText { min-height: 340px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; line-height: 1.6; }
+.frow { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.frow:last-child { border-bottom: 0; }
+.frow .who { flex: 1; min-width: 0; }
+.frow .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow .who span { color: var(--muted); font-size: 12px; }
+#logLines { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.6; height: 52vh; overflow-y: auto; background: var(--panel2); border-radius: 8px; padding: 8px 10px; }
+.ll { white-space: pre-wrap; word-break: break-all; }
+.ll .t { color: var(--muted); }
+.ll.WARNING { color: var(--warn); } .ll.ERROR, .ll.CRITICAL { color: var(--danger); }
+
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; max-width: min(380px, 90vw); }
+.toast { padding: 10px 14px; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font-size: 13px; }
+.toast.error { background: var(--danger); color: #fff; }
+.toast.ok { background: var(--ok); color: #fff; }
+@media (prefers-color-scheme: dark) { .toast.ok { color: #04150a; } .toast.error { color: #1a0505; } }
+
+.typing-dots::after { content: "…"; animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 820px) {
+  #main { grid-template-columns: 1fr; }
+  #chat { display: none; }
+  body.show-chat #side { display: none; }
+  body.show-chat #chat { display: flex; }
+  #backBtn { display: inline-block; }
+  .master span:first-child, .brand, .lbl, #connText { display: none; }
+  .status .short { display: inline; }
+  #topbar { gap: 6px; padding: 0 10px; }
+  #topbar .btn.ghost { padding: 6px 8px; }
+  .composer { padding: 8px 10px 12px; }
+  .composer .btn { padding: 6px 9px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">QQ 助手</div>
+    <div class="status"><span class="dot" id="connDot"></span><span id="connText">连接中…</span><span class="short" id="connShort"></span></div>
+    <div class="spacer"></div>
+    <div class="master">
+      <span>AI 总开关</span>
+      <button class="switch" id="masterSwitch" role="switch" aria-checked="false" aria-label="AI 总开关"></button>
+      <span id="masterText" style="min-width:2.2em"></span>
+    </div>
+    <button class="btn ghost" id="openAdd" aria-label="加入好友">＋<span class="lbl"> 加入好友</span></button>
+    <button class="btn ghost" id="openPersona">人设</button>
+    <button class="btn ghost" id="openSettings">设置</button>
+    <button class="btn ghost" id="openLog">日志</button>
+  </header>
+  <div id="banner"></div>
+  <main id="main">
+    <aside id="side">
+      <div class="side-head">
+        <input class="search" id="search" type="search" placeholder="搜索好友、QQ 号或消息" autocomplete="off">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tabAll" aria-selected="true">全部聊天</button>
+          <button role="tab" id="tabAi" aria-selected="false">AI 名单</button>
+        </div>
+      </div>
+      <div id="list"></div>
+    </aside>
+    <section id="chat">
+      <div id="empty">
+        <div style="font-size:15px;margin-bottom:6px;color:var(--text)">选择左侧的好友查看聊天</div>
+        <div>朋友发来的私聊都会出现在这里，包括不在 AI 名单里的人（AI 不会回复他们）。</div>
+      </div>
+      <div id="chatBox" hidden>
+        <div class="chat-head">
+          <button class="btn icon ghost" id="backBtn" aria-label="返回">←</button>
+          <div id="chAvatar"></div>
+          <div class="titles"><div id="chName"></div><div id="chSub"></div></div>
+          <div class="spacer"></div>
+          <div id="chActions"></div>
+        </div>
+        <div id="messages"></div>
+        <div id="previewCard" hidden></div>
+        <div class="composer">
+          <textarea id="input" rows="1" placeholder="以你的身份发送…（Enter 发送）"></textarea>
+          <div class="composer-actions">
+            <button class="btn" id="previewBtn" title="输入框有内容时，当作“对方说的话”看 AI 会怎么回；输入框为空时，让 AI 针对当前聊天起草一条。不会发送。">试聊 / 起草</button>
+            <button class="btn primary" id="sendBtn">发送</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="addModal">
+  <div class="dh"><h2>加入好友到 AI 名单</h2><button class="btn ghost icon" data-close aria-label="关闭">✕</button></div>
+  <div class="db">
+    <div class="field"><input type="text" id="addSearch" placeholder="搜索昵称、备注或 QQ 号" autocomplete="off"></div>
+    <div id="addList"></div>
+    <div class="field" style="margin-top:14px">
+      <label for="addQq">或者直接输入 QQ 号</label>
+      <div style="display:flex;gap:8px"><input type="text" id="addQq" inputmode="numeric" placeholder="例如 123456789"><button class="btn primary" id="addQqBtn">加入</button></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="personaModal">
+  <div class="dh"><h2>人设</h2><button class="btn ghost icon" data-close aria-label="关闭">✕</button></div>
+  <div class="db">
+    <div class="field">
+      <label for="personaText">AI 以什么身份和口吻说话</label>
+      <div class="help">保存后立即生效，不用重启。每位好友的备注（关系、称呼）在好友详情里单独设置。</div>
+      <textarea id="personaText" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="df"><button class="btn" data-close>取消</button><button class="btn primary" id="personaSave">保存</button></div>
+</dialog>
+
+<dialog id="settingsModal">
+  <div class="dh"><h2>设置</h2><button class="btn ghost icon" data-close aria-label="关闭">✕</button></div>
+  <div class="db" id="settingsForm"></div>
+  <div class="df"><button class="btn" data-close>取消</button><button class="btn primary" id="settingsSave">保存</button></div>
+</dialog>
+
+<dialog id="logModal">
+  <div class="dh"><h2>运行日志</h2><button class="btn ghost icon" data-close aria-label="关闭">✕</button></div>
+  <div class="db"><div id="logLines"></div></div>
+</dialog>
+
+<dialog id="friendModal">
+  <div class="dh"><h2 id="fmTitle">好友详情</h2><button class="btn ghost icon" data-close aria-label="关闭">✕</button></div>
+  <div class="db">
+    <div class="field"><label for="fmName">称呼</label><div class="help">AI 会用这个名字称呼对方，列表里也显示它。</div><input type="text" id="fmName"></div>
+    <div class="field"><label for="fmNote">备注（告诉 AI 你们的关系）</label><div class="help">例如：大学室友，说话随意，爱开玩笑；不要主动提他的前任。</div><textarea id="fmNote" rows="4"></textarea></div>
+    <div id="fmDanger" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+  </div>
+  <div class="df"><button class="btn" data-close>取消</button><button class="btn primary" id="fmSave">保存</button></div>
+</dialog>
+
+<dialog id="authModal">
+  <div class="dh"><h2>需要访问令牌</h2></div>
+  <div class="db">
+    <p>请使用 bot 启动时在终端里打印的“控制面板”链接打开本页（链接里带有令牌），或把令牌粘贴到下面。</p>
+    <div class="field"><input type="password" id="authToken" placeholder="访问令牌"></div>
+  </div>
+  <div class="df"><button class="btn primary" id="authGo">确定</button></div>
+</dialog>
+
+<div id="toasts" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// Everything user-controlled goes through textContent / text nodes, never innerHTML.
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
+}
+
+/* ---------------- auth + api ---------------- */
+const urlToken = new URLSearchParams(location.search).get("token");
+let TOKEN = urlToken || store.get("token", "") || "";
+if (urlToken) { store.set("token", urlToken); history.replaceState(null, "", location.pathname); }
+
+function askToken() {
+  const dlg = $("#authModal");
+  if (!dlg.open) dlg.showModal();
+}
+$("#authGo").onclick = () => {
+  const v = $("#authToken").value.trim();
+  if (!v) return;
+  TOKEN = v; store.set("token", v); location.reload();
+};
+$("#authModal").addEventListener("cancel", e => e.preventDefault());
+
+async function api(path, method = "GET", data) {
+  const res = await fetch(path, {
+    method,
+    headers: { "X-Token": TOKEN, ...(data !== undefined ? { "Content-Type": "application/json" } : {}) },
+    body: data !== undefined ? JSON.stringify(data) : undefined,
+  });
+  let j = {};
+  try { j = await res.json(); } catch {}
+  if (res.status === 401) { askToken(); throw new Error("未授权"); }
+  if (!res.ok) throw new Error(j.error || `请求失败（${res.status}）`);
+  return j;
+}
+
+/* ---------------- state ---------------- */
+const S = {
+  st: null, skew: 0, active: null, filter: "all", q: "",
+  chats: new Map(), lastSeen: store.get("lastSeen", {}), preview: null, sse: false,
+  logs: [], stateTimer: null,
+};
+const nowSec = () => Date.now() / 1000 + S.skew;
+
+/* ---------------- formatting ---------------- */
+const pad = n => String(n).padStart(2, "0");
+const hm = ts => { const d = new Date(ts * 1000); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+function dayLabel(ts) {
+  const d = new Date(ts * 1000), n = new Date(), y = new Date(n - 864e5);
+  if (d.toDateString() === n.toDateString()) return "今天";
+  if (d.toDateString() === y.toDateString()) return "昨天";
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+const shortTime = ts => dayLabel(ts) === "今天" ? hm(ts) : dayLabel(ts);
+const srcTag = { ai: "AI", manual: "手动", device: "你（其他设备）" };
+
+function avatar(name, qq, size = 40) {
+  const ch = [...(name || String(qq))][0] || "?";
+  return h("div", { class: "avatar", style: `width:${size}px;height:${size}px;font-size:${Math.round(size * .42)}px;background:hsl(${(qq * 47) % 360} 50% 46%)`, text: ch.toUpperCase() });
+}
+function toast(text, level = "info") {
+  const el = h("div", { class: "toast " + level, text });
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), level === "error" ? 6000 : 3500);
+}
+const friend = qq => S.st && S.st.friends.find(f => f.qq === qq);
+function pauseText(f) {
+  if (!f.paused) return "";
+  if (f.paused === "forever") return "已暂停（直到你恢复）";
+  const m = Math.max(1, Math.ceil((f.paused - nowSec()) / 60));
+  return `已暂停，约 ${m} 分钟后自动恢复`;
+}
+function isUnread(f) {
+  return f.last && f.last.direction === "in" && f.last.ts > (S.lastSeen[f.qq] || 0) && f.qq !== S.active;
+}
+function markSeen(qq, ts) {
+  if (ts > (S.lastSeen[qq] || 0)) { S.lastSeen[qq] = ts; store.set("lastSeen", S.lastSeen); }
+}
+
+/* ---------------- render: top + banner ---------------- */
+function renderTop() {
+  const st = S.st;
+  $("#connDot").classList.toggle("on", st.connected);
+  $("#connText").textContent = st.connected ? `NapCat 已连接${st.self_id ? "（" + st.self_id + "）" : ""}` : "NapCat 未连接";
+  $("#connShort").textContent = st.connected ? "已连接" : "未连接";
+  const sw = $("#masterSwitch");
+  sw.setAttribute("aria-checked", String(st.enabled));
+  $("#masterText").textContent = st.enabled ? "开启" : "关闭";
+}
+function renderBanner() {
+  const st = S.st, notes = [];
+  if (!S.sse) notes.push(["warn", "与本程序的连接断开了，正在重连…（如果一直这样，请确认 bot 窗口还开着）"]);
+  if (!st.connected) notes.push(["warn", "NapCat 未连接。请确认 NapCat 已登录，并且它的 WebSocket 客户端指向本程序。"]);
+  if (!st.has_api_key) notes.push(["warn", "还没有配置 OpenRouter API Key（config.yaml 的 openrouter_api_key），AI 暂时无法回复。"]);
+  if (st.quiet_now) notes.push(["info", `当前处于静默时段（${st.quiet_hours}），AI 不会回复，期间的消息也不会事后补回。`]);
+  $("#banner").replaceChildren(...notes.map(([lv, t]) => h("div", { class: "note " + lv, text: t })));
+}
+
+/* ---------------- render: sidebar ---------------- */
+function visibleFriends() {
+  let list = S.st.friends;
+  if (S.filter === "ai") list = list.filter(f => f.whitelisted);
+  const q = S.q.trim().toLowerCase();
+  if (q) list = list.filter(f => `${f.name} ${f.qq} ${f.last ? f.last.text : ""}`.toLowerCase().includes(q));
+  return list;
+}
+function renderSide() {
+  const list = visibleFriends(), box = $("#list");
+  if (!list.length) {
+    box.replaceChildren(h("div", { class: "empty-note", text: S.q ? "没有匹配的好友" :
+      S.filter === "ai" ? "AI 名单还是空的。点右上角「＋ 加入好友」，或在聊天里加入。" :
+      "还没有聊天记录。朋友发来私聊后会出现在这里。" }));
+    return;
+  }
+  box.replaceChildren(...list.map(f => {
+    const last = f.last;
+    const snippet = last ? (last.direction === "out" ? "我：" : "") + last.text.replace(/\n/g, " ") : "（暂无消息）";
+    const chips = [];
+    if (f.typing) chips.push(h("span", { class: "chip ai", text: "输入中" }));
+    else if (f.paused) chips.push(h("span", { class: "chip warn", text: "暂停" }));
+    else if (f.whitelisted) chips.push(h("span", { class: S.st.enabled ? "chip ok" : "chip", text: "AI" }));
+    if (isUnread(f)) chips.push(h("span", { class: "unread", title: "未读" }));
+    return h("button", { class: "item" + (f.qq === S.active ? " active" : ""), onclick: () => select(f.qq) },
+      avatar(f.name, f.qq),
+      h("div", { class: "meta" },
+        h("div", { class: "row1" }, h("span", { class: "nm", text: f.name }), last && h("span", { class: "tm", text: shortTime(last.ts) })),
+        h("div", { class: "row2" }, h("span", { class: "snip", text: snippet }), ...chips)));
+  }));
+}
+
+/* ---------------- render: chat ---------------- */
+function renderChatHead() {
+  const f = friend(S.active);
+  if (!f) return;
+  $("#chAvatar").replaceChildren(avatar(f.name, f.qq, 38));
+  $("#chName").textContent = f.name;
+  const sub = $("#chSub");
+  sub.classList.toggle("typing", f.typing);
+  if (f.typing) { sub.textContent = "AI 正在输入"; sub.classList.add("typing-dots"); }
+  else {
+    sub.classList.remove("typing-dots");
+    sub.textContent = !f.whitelisted ? `QQ ${f.qq} · 不在 AI 名单，AI 不会回复`
+      : f.paused ? `QQ ${f.qq} · ${pauseText(f)}`
+      : !S.st.enabled ? `QQ ${f.qq} · AI 总开关已关闭，不会回复`
+      : `QQ ${f.qq} · AI 正在代你回复`;
+  }
+  const acts = [];
+  if (f.whitelisted) {
+    if (f.paused) {
+      acts.push(h("button", { class: "btn primary", onclick: () => act(`/api/friend/${f.qq}/resume`, "POST", {}, "已恢复 AI 回复") }, "恢复 AI"));
+    } else {
+      const pop = h("div", { class: "menu-pop" },
+        ...[["暂停 30 分钟", 30], ["暂停 2 小时", 120], ["暂停，直到我恢复", null]].map(([label, m]) =>
+          h("button", { onclick: e => { e.target.closest("details").open = false; act(`/api/friend/${f.qq}/pause`, "POST", { minutes: m }, "已暂停 AI 回复"); } }, label)));
+      acts.push(h("details", { class: "menu" }, h("summary", { class: "btn" }, "暂停 AI ▾"), pop));
+    }
+  } else {
+    acts.push(h("button", { class: "btn primary", onclick: () => openFriend(f.qq) }, "加入 AI 名单"));
+  }
+  acts.push(h("button", { class: "btn", onclick: () => openFriend(f.qq) }, "详情"));
+  $("#chActions").replaceChildren(...acts);
+}
+function bubble(m) {
+  const out = m.direction === "out";
+  return h("div", { class: "row " + (out ? "out" : "in") },
+    h("div", { class: "stack" },
+      srcTag[m.source] && h("div", { class: "tag " + m.source, text: srcTag[m.source] }),
+      h("div", { class: "bubble " + m.source, text: m.content })));
+}
+function renderMessages(forceStick) {
+  const box = $("#messages"), list = S.chats.get(S.active) || [];
+  const stick = forceStick || box.scrollHeight - box.scrollTop - box.clientHeight < 90;
+  const nodes = [];
+  let prev = null;
+  if (!list.length) nodes.push(h("div", { class: "hint-empty", text: "还没有聊天记录" }));
+  for (const m of list) {
+    if (!prev || m.ts - prev.ts > 300 || dayLabel(m.ts) !== dayLabel(prev.ts))
+      nodes.push(h("div", { class: "stamp", text: `${dayLabel(m.ts)} ${hm(m.ts)}` }));
+    nodes.push(bubble(m));
+    prev = m;
+  }
+  box.replaceChildren(...nodes);
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+function renderPreview() {
+  const card = $("#previewCard"), p = S.preview;
+  if (!p) { card.hidden = true; return; }
+  card.hidden = false;
+  const head = h("div", { class: "ph" }, h("span", { text: p.text ? `试聊：假如对方说「${p.text.length > 30 ? p.text.slice(0, 30) + "…" : p.text}」` : "AI 起草" }),
+    h("span", { class: "spacer" }), h("button", { class: "btn ghost sm", onclick: () => { S.preview = null; renderPreview(); } }, "关闭"));
+  let body, foot = null;
+  if (p.loading) body = h("div", { class: "typing-dots", text: "AI 正在想" });
+  else if (p.error) body = h("div", { style: "color:var(--danger)", text: p.error });
+  else if (!p.segments.length) body = h("div", { text: "AI 认为现在不需要说话。" });
+  else {
+    body = h("div", { class: "pb" }, ...p.segments.map(s => h("div", { class: "bubble draft", text: s })));
+    foot = h("div", { class: "pf" },
+      h("button", { class: "btn primary sm", onclick: sendPreview }, "按这个发送（以你的身份）"),
+      h("button", { class: "btn sm", onclick: doPreview }, "重新生成"));
+  }
+  card.replaceChildren(head, body, foot);
+}
+function renderAll() {
+  if (!S.st) return;
+  renderTop(); renderBanner(); renderSide();
+  if (S.active && friend(S.active)) {
+    $("#empty").hidden = true; $("#chatBox").hidden = false; renderChatHead();
+  } else if (S.active) { // chat target vanished (shouldn't happen)
+    S.active = null;
+  }
+  if (!S.active) { $("#empty").hidden = false; $("#chatBox").hidden = true; document.body.classList.remove("show-chat"); }
+}
+
+/* ---------------- data loading ---------------- */
+async function loadState() {
+  const st = await api("/api/state");
+  S.skew = st.now - Date.now() / 1000;
+  S.st = st;
+  renderAll();
+}
+function scheduleState() {
+  clearTimeout(S.stateTimer);
+  S.stateTimer = setTimeout(() => loadState().catch(() => {}), 250);
+}
+async function reloadChat() {
+  if (S.active == null) return;
+  const qq = S.active;
+  const r = await api(`/api/chat/${qq}`);
+  S.chats.set(qq, r.messages);
+  if (S.active === qq) {
+    renderMessages(true);
+    const last = r.messages[r.messages.length - 1];
+    if (last) markSeen(qq, last.ts);
+    renderSide();
+  }
+}
+async function select(qq) {
+  S.active = qq; S.preview = null;
+  document.body.classList.add("show-chat");
+  renderAll(); renderPreview();
+  $("#messages").replaceChildren(h("div", { class: "hint-empty", text: "加载中…" }));
+  try { await reloadChat(); } catch (e) { toast(e.message, "error"); }
+  $("#input").focus({ preventScroll: true });
+}
+
+/* ---------------- live events ---------------- */
+function connectEvents() {
+  const es = new EventSource("/api/events?token=" + encodeURIComponent(TOKEN));
+  es.onopen = () => { S.sse = true; if (S.st) renderBanner(); loadState().catch(() => {}); if (S.active) reloadChat().catch(() => {}); };
+  es.onerror = () => { S.sse = false; if (S.st) renderBanner(); };
+  es.onmessage = e => {
+    let ev; try { ev = JSON.parse(e.data); } catch { return; }
+    if (ev.type === "message") {
+      const list = S.chats.get(ev.peer);
+      if (list && !list.some(m => m.id === ev.id)) list.push(ev);
+      if (ev.peer === S.active) { renderMessages(false); markSeen(ev.peer, ev.ts); }
+      scheduleState();
+    } else if (ev.type === "state") scheduleState();
+    else if (ev.type === "toast") toast(ev.text, ev.level);
+    else if (ev.type === "log") pushLog(ev);
+  };
+}
+
+/* ---------------- actions ---------------- */
+async function act(path, method, data, okText) {
+  try { await api(path, method, data); if (okText) toast(okText, "ok"); await loadState(); }
+  catch (e) { toast(e.message, "error"); }
+}
+async function sendMessage() {
+  const ta = $("#input"), text = ta.value.trim();
+  if (!text || S.active == null) return;
+  const btn = $("#sendBtn"); btn.disabled = true;
+  try {
+    await api("/api/send", "POST", { qq: S.active, text });
+    ta.value = ""; autosize();
+    if (!S.sse) await reloadChat();
+  } catch (e) { toast(e.message, "error"); }
+  btn.disabled = false; ta.focus();
+}
+async function doPreview() {
+  if (S.active == null) return;
+  const text = $("#input").value.trim();
+  S.preview = { loading: true, text }; renderPreview();
+  try { const r = await api("/api/preview", "POST", { qq: S.active, text }); S.preview = { segments: r.segments, text }; }
+  catch (e) { S.preview = { error: e.message, text }; }
+  renderPreview();
+}
+async function sendPreview() {
+  const p = S.preview; if (!p || !p.segments) return;
+  try {
+    for (let i = 0; i < p.segments.length; i++) {
+      if (i) await sleep(700);
+      await api("/api/send", "POST", { qq: S.active, text: p.segments[i] });
+    }
+    if (p.text) { $("#input").value = ""; autosize(); }
+    S.preview = null; renderPreview();
+    if (!S.sse) await reloadChat();
+  } catch (e) { toast(e.message, "error"); }
+}
+function autosize() {
+  const ta = $("#input"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+}
+
+/* ---------------- dialogs ---------------- */
+document.addEventListener("click", e => {
+  const c = e.target.closest("[data-close]");
+  if (c) c.closest("dialog").close();
+  if (e.target.tagName === "DIALOG") e.target.close(); // click on backdrop
+  document.querySelectorAll("details.menu[open]").forEach(d => { if (!d.contains(e.target)) d.open = false; });
+});
+
+// --- add friend
+let napFriends = [];
+function renderAddList() {
+  const q = $("#addSearch").value.trim().toLowerCase();
+  const rows = napFriends.filter(f => `${f.remark} ${f.nickname} ${f.qq}`.toLowerCase().includes(q)).slice(0, 80);
+  $("#addList").replaceChildren(...(rows.length ? rows.map(f => {
+    const name = f.remark || f.nickname || String(f.qq);
+    return h("div", { class: "frow" }, avatar(name, f.qq, 34),
+      h("div", { class: "who" }, h("b", { text: name }), h("span", { text: f.remark && f.nickname ? `${f.nickname} · ${f.qq}` : String(f.qq) })),
+      f.whitelisted ? h("span", { class: "chip ok", text: "已在名单" })
+        : h("button", { class: "btn sm primary", onclick: () => addFriend(f.qq, name) }, "加入"));
+  }) : [h("div", { class: "empty-note", text: napFriends.length ? "没有匹配的好友" : "没有取到好友列表（NapCat 是否已连接？）" })]));
+}
+async function addFriend(qq, name) {
+  try {
+    await api(`/api/friend/${qq}/allow`, "POST", { name: name || "" });
+    toast(`已把 ${name || qq} 加入 AI 名单`, "ok");
+    napFriends.forEach(f => { if (f.qq === qq) f.whitelisted = true; });
+    renderAddList(); await loadState();
+  } catch (e) { toast(e.message, "error"); }
+}
+$("#openAdd").onclick = async () => {
+  $("#addModal").showModal(); $("#addSearch").value = "";
+  $("#addList").replaceChildren(h("div", { class: "empty-note", text: "加载好友列表…" }));
+  try { napFriends = (await api("/api/napcat-friends")).friends; } catch (e) { napFriends = []; toast(e.message, "error"); }
+  renderAddList();
+};
+$("#addSearch").oninput = renderAddList;
+$("#addQqBtn").onclick = async () => {
+  const v = $("#addQq").value.trim();
+  if (!/^\d{5,12}$/.test(v)) return toast("QQ 号应为 5–12 位数字", "error");
+  await addFriend(Number(v), ""); $("#addQq").value = "";
+};
+
+// --- persona
+$("#openPersona").onclick = async () => {
+  $("#personaModal").showModal();
+  const ta = $("#personaText"); ta.value = "加载中…"; ta.disabled = true;
+  try { ta.value = (await api("/api/persona")).text; } catch (e) { ta.value = ""; toast(e.message, "error"); }
+  ta.disabled = false;
+};
+$("#personaSave").onclick = async () => {
+  try { await api("/api/persona", "PUT", { text: $("#personaText").value }); toast("人设已保存，立即生效", "ok"); $("#personaModal").close(); }
+  catch (e) { toast(e.message, "error"); }
+};
+
+// --- settings
+const FIELDS = [
+  ["model", "模型", "text", "OpenRouter 上的模型 ID，例如 anthropic/claude-sonnet-4.5"],
+  ["quiet_hours", "静默时段", "text", "格式 00:30-08:00，期间 AI 不回复且不补回；留空 = 不静默"],
+  ["takeover_minutes", "你在其他设备亲自回复后，AI 暂停（分钟）", "number", "0 = 不暂停。用本控制台发消息不会触发暂停"],
+  ["debounce_seconds", "对方连发消息，等多久再统一回复（秒）", "number", ""],
+  ["humanize", "模拟阅读和打字延迟", "bool", "关闭后 AI 会立刻回复，更像机器人"],
+  ["history_window", "每次带给 AI 的历史消息条数", "number", ""],
+  ["max_segments", "一次回复最多拆成几条消息", "number", ""],
+  ["max_tokens", "回复长度上限（token）", "number", ""],
+  ["temperature", "随机性 temperature（0–2）", "number", "越高越发散"],
+  ["rate_per_user_per_min", "单个好友每分钟最多回复次数", "number", "防风控"],
+  ["rate_global_per_min", "全局每分钟最多回复次数", "number", "防风控"],
+];
+$("#openSettings").onclick = async () => {
+  $("#settingsModal").showModal();
+  const form = $("#settingsForm");
+  form.replaceChildren(h("div", { class: "empty-note", text: "加载中…" }));
+  let cur;
+  try { cur = (await api("/api/settings")).settings; } catch (e) { form.replaceChildren(); return toast(e.message, "error"); }
+  form.replaceChildren(...FIELDS.map(([k, label, type, help]) => {
+    const id = "set_" + k;
+    if (type === "bool") return h("div", { class: "field inline" }, h("label", { for: id, text: label }),
+      h("input", { id, type: "checkbox", "data-key": k, ...(cur[k] ? { checked: true } : {}) }));
+    return h("div", { class: "field" }, h("label", { for: id, text: label }), help && h("div", { class: "help", text: help }),
+      h("input", { id, type: type === "number" ? "number" : "text", step: "any", "data-key": k, value: cur[k] }));
+  }));
+};
+$("#settingsSave").onclick = async () => {
+  const values = {};
+  document.querySelectorAll("#settingsForm [data-key]").forEach(el => {
+    const k = el.dataset.key, t = FIELDS.find(f => f[0] === k)[2];
+    values[k] = t === "bool" ? el.checked : t === "number" ? Number(el.value) : el.value;
+  });
+  try { await api("/api/settings", "PUT", values); toast("设置已保存，立即生效", "ok"); $("#settingsModal").close(); await loadState(); }
+  catch (e) { toast(e.message, "error"); }
+};
+
+// --- friend details
+let fmQq = null;
+function openFriend(qq) {
+  const f = friend(qq); if (!f) return;
+  fmQq = qq;
+  $("#fmTitle").textContent = f.whitelisted ? `${f.name} · 详情` : `加入 AI 名单：${f.name}`;
+  $("#fmName").value = f.name; $("#fmNote").value = f.note || "";
+  $("#fmSave").textContent = f.whitelisted ? "保存" : "加入 AI 名单";
+  $("#fmDanger").replaceChildren(...(f.whitelisted ? [
+    h("button", { class: "btn danger", onclick: async () => {
+      if (!confirm(`清空 AI 对「${f.name}」的记忆？\n（聊天记录仍会保留，只是 AI 不再参考之前的对话）`)) return;
+      await act(`/api/friend/${qq}/clear-memory`, "POST", {}, "已清空 AI 记忆"); } }, "清空 AI 记忆"),
+    h("button", { class: "btn danger", onclick: async () => {
+      if (!confirm(`把「${f.name}」移出 AI 名单？之后 AI 不会再回复他。`)) return;
+      await act(`/api/friend/${qq}/deny`, "POST", {}, "已移出 AI 名单"); $("#friendModal").close(); } }, "移出 AI 名单"),
+  ] : []));
+  $("#friendModal").showModal();
+}
+$("#fmSave").onclick = async () => {
+  const f = friend(fmQq);
+  await act(`/api/friend/${fmQq}/allow`, "POST", { name: $("#fmName").value.trim(), note: $("#fmNote").value.trim() },
+    f && f.whitelisted ? "已保存" : "已加入 AI 名单");
+  $("#friendModal").close();
+};
+
+// --- logs
+function logLine(l) {
+  return h("div", { class: "ll " + l.level }, h("span", { class: "t", text: new Date(l.ts * 1000).toTimeString().slice(0, 8) + "  " }), l.text);
+}
+function pushLog(l) {
+  S.logs.push(l); if (S.logs.length > 500) S.logs.shift();
+  if ($("#logModal").open) { const box = $("#logLines"), at = box.scrollHeight - box.scrollTop - box.clientHeight < 40; box.append(logLine(l)); if (at) box.scrollTop = box.scrollHeight; }
+}
+$("#openLog").onclick = async () => {
+  $("#logModal").showModal();
+  try { S.logs = (await api("/api/logs")).lines; } catch (e) { toast(e.message, "error"); }
+  const box = $("#logLines"); box.replaceChildren(...S.logs.map(logLine)); box.scrollTop = box.scrollHeight;
+};
+
+/* ---------------- wiring ---------------- */
+$("#masterSwitch").onclick = async () => {
+  if (!S.st) return;
+  const want = !S.st.enabled;
+  try { await api("/api/enabled", "POST", { enabled: want }); S.st.enabled = want; renderTop(); renderSide(); if (S.active) renderChatHead(); }
+  catch (e) { toast(e.message, "error"); }
+};
+$("#search").oninput = e => { S.q = e.target.value; if (S.st) renderSide(); };
+for (const [id, f] of [["tabAll", "all"], ["tabAi", "ai"]]) $("#" + id).onclick = () => {
+  S.filter = f; $("#tabAll").setAttribute("aria-selected", String(f === "all")); $("#tabAi").setAttribute("aria-selected", String(f === "ai"));
+  if (S.st) renderSide();
+};
+$("#backBtn").onclick = () => { S.active = null; renderAll(); };
+$("#sendBtn").onclick = sendMessage;
+$("#previewBtn").onclick = doPreview;
+$("#input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+});
+$("#input").addEventListener("input", autosize);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.st) loadState().catch(() => {}); });
+setInterval(() => { // keep "N minutes left" fresh and notice timed pauses that ended
+  if (!S.st) return;
+  if (S.st.friends.some(f => typeof f.paused === "number" && f.paused <= nowSec())) return loadState().catch(() => {});
+  if (S.active) renderChatHead();
+}, 30000);
+
+(async function boot() {
+  if (!TOKEN) { askToken(); return; }
+  try {
+    await loadState();
+    api("/api/logs").then(r => { S.logs = r.lines; }).catch(() => {});
+    connectEvents();
+  } catch (e) { if (e.message !== "未授权") toast(e.message, "error"); }
+})();
+</script>
+</body>
+</html>

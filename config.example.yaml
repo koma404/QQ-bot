@@ -28,3 +28,10 @@ rate_global_per_min: 15           # 全局每分钟上限
 listen_host: "127.0.0.1"
 listen_port: 6700
 onebot_token: ""                  # 可选；与 NapCat 里配置的 token 一致
+
+# ---- 控制面板（网页界面）----
+ui_enabled: true                  # 启动时同时开启控制面板
+ui_port: 8765                     # 面板地址 http://127.0.0.1:8765 ；端口被占用就改这里
+ui_open_browser: true             # 启动后自动用浏览器打开面板
+log_non_whitelisted: true         # 非白名单好友的消息也记录下来供你在面板里查看（AI 永远不会回复他们）
+console_input: false              # 旧的终端命令模式（面板已经取代它；终端输入框偶尔会错位，默认关闭）

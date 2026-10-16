@@ -47,6 +47,7 @@ class Flow(unittest.IsolatedAsyncioTestCase):
         self.cfg = Config(openrouter_api_key="x", persona_file=self.tmp.name, humanize=False,
                           debounce_seconds=0.1, db_path=":memory:",
                           friends_file=os.path.join(tempfile.mkdtemp(), "friends.json"),
+                          settings_file=os.path.join(tempfile.mkdtemp(), "settings.json"),
                           friends={FRIEND: Friend("小明", "室友")})
         self.llm = FakeLLM()
         self.bot = Bot(self.cfg, self.llm, Memory(":memory:"))
@@ -219,7 +220,7 @@ class Flow(unittest.IsolatedAsyncioTestCase):
 
     def cfg_copy(self):
         return Config(friends={FRIEND: Friend("小明", "室友")}, friends_file=self.cfg.friends_file,
-                      db_path=":memory:")
+                      settings_file="", db_path=":memory:")
 
     async def test_rate_limit(self):
         self.cfg.rate_per_user_per_min = 1
